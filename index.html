@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BannerCraft - AI Banner Prompt Engine</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            orange: '#F5A623',
+                            black: '#0A0A0A',
+                            dark: '#171717',
+                            gray: '#FAFAFA',
+                            border: '#E5E5E5'
+                        }
+                    },
+                    boxShadow: {
+                        'soft': '0 4px 20px -2px rgba(0, 0, 0, 0.05)',
+                        'float': '0 10px 30px -5px rgba(0, 0, 0, 0.08)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #FAFAFA;
+            color: #171717;
+            overflow: hidden; /* Manage scrolling in flex children */
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #E5E5E5;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #D4D4D4;
+        }
+
+        /* Hide Number Input Arrows */
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        /* Custom Toggle Switch */
+        .toggle-checkbox:checked {
+            right: 0;
+            border-color: #0A0A0A;
+        }
+        .toggle-checkbox:checked + .toggle-label {
+            background-color: #0A0A0A;
+        }
+        
+        .pill-btn {
+            transition: all 0.2s ease;
+        }
+        .pill-btn.active {
+            background-color: #0A0A0A;
+            color: white;
+            border-color: #0A0A0A;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .color-circle {
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .color-circle.active {
+            transform: scale(1.15);
+            box-shadow: 0 0 0 2px white, 0 0 0 4px #0A0A0A;
+        }
+
+        #prompt-result-container {
+            transition: opacity 0.4s ease, transform 0.4s ease;
+            opacity: 0;
+            transform: translateY(10px);
+            pointer-events: none;
+            position: absolute; /* Hide visually until generated */
+            visibility: hidden;
+        }
+        
+        #prompt-result-container.show {
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto;
+            position: relative;
+            visibility: visible;
+        }
+
+        #empty-state {
+            transition: opacity 0.3s ease;
+        }
+        #empty-state.hide {
+            opacity: 0;
+            pointer-events: none;
+            position: absolute;
+            visibility: hidden;
+        }
+
+        /* Smooth inputs */
+        .input-field {
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .input-field:focus {
+            border-color: #F5A623;
+            box-shadow: 0 0 0 3px rgba(245, 166, 35, 0.1);
+            outline: none;
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col antialiased">
+
+    <!-- Navbar -->
+    <nav class="bg-brand-black text-white h-16 flex items-center justify-between px-6 lg:px-10 shrink-0 z-20 relative shadow-md">
+        <div class="flex items-center gap-3">
+            <div class="w-8 h-8 bg-brand-orange rounded-lg flex items-center justify-center shadow-lg">
+                <i class="fas fa-layer-group text-brand-black text-sm"></i>
+            </div>
+            <div class="flex flex-col">
+                <h1 class="text-lg font-bold leading-tight tracking-wide">BannerCraft</h1>
+                <span class="text-[10px] text-gray-400 tracking-widest font-medium uppercase">AI Banner Prompt Engine</span>
+            </div>
+        </div>
+        <div>
+            <span class="bg-white/10 text-brand-orange border border-brand-orange/30 text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-2">
+                <i class="fas fa-bolt text-[10px]"></i> AI Powered
+            </span>
+        </div>
+    </nav>
+
+    <!-- Main Layout -->
+    <main class="flex-1 flex flex-col lg:flex-row overflow-hidden">
+        
+        <!-- Sidebar Configuration -->
+        <aside class="w-full lg:w-[460px] bg-white border-r border-brand-border overflow-y-auto shrink-0 flex flex-col relative z-10 shadow-[2px_0_10px_rgba(0,0,0,0.02)]">
+            <div class="p-6 space-y-8 pb-32" id="sidebar-content">
+                <!-- Content will be injected here by JS -->
+            </div>
+            
+            <!-- Sticky Bottom Generate Button -->
+            <div class="sticky bottom-0 w-full bg-white/90 backdrop-blur-md border-t border-brand-border p-5 pb-6">
+                <button id="btn-generate" class="w-full bg-brand-black hover:bg-brand-dark text-white font-semibold py-4 px-6 rounded-xl shadow-lg transition-all transform hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center gap-3 text-lg">
+                    <i class="fas fa-wand-magic-sparkles text-brand-orange"></i>
+                    Generate Banner Prompt
+                </button>
+            </div>
+        </aside>
+
+        <!-- Output Area -->
+        <section class="flex-1 bg-brand-gray overflow-y-auto p-6 lg:p-10 relative">
+            
+            <!-- Empty State -->
+            <div id="empty-state" class="h-full flex flex-col items-center justify-center text-center max-w-md mx-auto opacity-100">
+                <div class="w-24 h-24 bg-white rounded-full shadow-soft flex items-center justify-center mb-6">
+                    <i class="fas fa-pen-nib text-4xl text-gray-300"></i>
+                </div>
+                <h2 class="text-2xl font-bold text-gray-800 mb-3">Configure Your Banner</h2>
+                <p class="text-gray-500 text-sm leading-relaxed">
+                    Select your preferred styles, input business details in the sidebar, and click generate to create a highly professional, agency-level prompt for AI image generators.
+                </p>
+            </div>
+
+            <!-- Result Container -->
+            <div id="prompt-result-container" class="max-w-4xl mx-auto space-y-6">
+                <!-- Header Card -->
+                <div class="bg-white rounded-2xl shadow-soft p-6 lg:p-8 border border-brand-border flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                    <div>
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                            <h2 class="text-2xl font-bold text-gray-900">Banner Prompt Ready</h2>
+                        </div>
+                        <p class="text-gray-500 text-sm">Copy and paste this into ChatGPT, Midjourney, or Claude.</p>
+                    </div>
+                    
+                    <!-- Metadata Badges -->
+                    <div class="flex flex-wrap gap-2" id="meta-badges">
+                        <!-- Badges injected via JS -->
+                    </div>
+                </div>
+
+                <!-- Action Buttons Row -->
+                <div class="flex flex-wrap gap-3">
+                    <button id="btn-copy" class="flex-1 bg-white border border-brand-border hover:bg-gray-50 hover:border-gray-300 text-gray-700 font-medium py-3 px-4 rounded-xl shadow-sm transition-all flex items-center justify-center gap-2">
+                        <i class="far fa-copy"></i> Copy Prompt
+                    </button>
+                    <button id="btn-chatgpt" class="flex-1 bg-[#10A37F] hover:bg-[#0E906F] text-white font-medium py-3 px-4 rounded-xl shadow-sm transition-all flex items-center justify-center gap-2">
+                        <i class="fas fa-robot"></i> Kirim ke ChatGPT
+                    </button>
+                    <button id="btn-download" class="flex-1 bg-white border border-brand-border hover:bg-gray-50 hover:border-gray-300 text-gray-700 font-medium py-3 px-4 rounded-xl shadow-sm transition-all flex items-center justify-center gap-2">
+                        <i class="fas fa-download"></i> Download TXT
+                    </button>
+                </div>
+
+                <!-- Prompt Text Area -->
+                <div class="bg-white rounded-2xl shadow-soft border border-brand-border overflow-hidden flex flex-col">
+                    <div class="bg-gray-50 border-b border-brand-border px-6 py-3 flex items-center justify-between">
+                        <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Prompt Output</span>
+                        <span id="word-count" class="text-xs text-gray-400">0 words</span>
+                    </div>
+                    <div class="p-6">
+                        <textarea id="prompt-output" readonly class="w-full h-[60vh] resize-none focus:outline-none text-gray-700 leading-relaxed font-mono text-sm bg-transparent" spellcheck="false"></textarea>
+                    </div>
+                </div>
+            </div>
+            
+        </section>
+    </main>
+
+    <script>
+        // Configuration Data for UI Generation
+        const CONFIG = {
+            bannerTypes: [
+                "Promotional Banner", "Product Banner", "Company Profile Banner", 
+                "Grand Opening", "Discount Sale", "Event Banner", "Real Estate", 
+                "Automotive", "Restaurant", "Beauty", "Fashion", "Healthcare", 
+                "Education", "Travel", "Billboard", "Website Hero", "Facebook Cover", 
+                "YouTube Banner", "Roll Up Banner", "X Banner", "Custom"
+            ],
+            formats: ["Single Banner", "Banner Series", "Adaptive Multi Size"],
+            ratios: ["1:1", "4:5", "16:9", "9:16", "4:3", "3:1", "Billboard", "Custom"],
+            designStyles: [
+                "Modern Minimal", "Corporate Clean", "Luxury Premium", "Bold Graphic", 
+                "Editorial", "Glassmorphism", "Soft Gradient", "Luxury Dark", 
+                "Minimal White", "Creative Dynamic"
+            ],
+            priorities: [
+                "Product First", "Service First", "Human First", "Building First", 
+                "Brand First", "Offer First", "Lifestyle First", "Typography First"
+            ],
+            colors: [
+                { name: "Black", hex: "#171717" },
+                { name: "Blue", hex: "#2563EB" },
+                { name: "Green", hex: "#16A34A" },
+                { name: "Orange", hex: "#F5A623" },
+                { name: "Red", hex: "#DC2626" },
+                { name: "Purple", hex: "#9333EA" },
+                { name: "Gold", hex: "#D97706" },
+                { name: "Beige", hex: "#D4D4D8" }, // Representing beige/neutral
+                { name: "Auto From Logo", hex: "linear-gradient(45deg, #f3f4f6, #d1d5db)" }
+            ],
+            complexities: ["Simple", "Balanced", "Premium Rich"],
+            directions: [
+                "Studio Product", "Lifestyle", "Luxury", "Corporate Office", 
+                "Restaurant", "Modern Interior", "Outdoor", "Nature", 
+                "Technology", "Construction", "Retail", "Medical", "Fashion"
+            ],
+            backgrounds: [
+                "Gradient", "Abstract Shape", "Minimal White", "Luxury", 
+                "Glass", "Photo Background", "Mesh Gradient", "Corporate", "Editorial"
+            ],
+            options: [
+                { id: "opt_icon", label: "Sertakan Icon" },
+                { id: "opt_cta", label: "Sertakan CTA Button" },
+                { id: "opt_badge", label: "Sertakan Badge Promo" },
+                { id: "opt_shadow", label: "Sertakan Shadow" },
+                { id: "opt_brand", label: "Sertakan Brand Asset" },
+                { id: "opt_font_rec", label: "Generate Font Recommendation" },
+                { id: "opt_color_rec", label: "Generate Color Recommendation" },
+                { id: "opt_ref", label: "Gunakan uploaded image sebagai referensi" }
+            ],
+            assetModes: ["AI Generated Visual", "Brand Asset Mode"]
+        };
+
+        // State Object to hold user selections
+        const state = {
+            bannerType: CONFIG.bannerTypes[0],
+            outputFormat: CONFIG.formats[0],
+            bannerRatio: CONFIG.ratios[0],
+            designStyle: CONFIG.designStyles[0],
+            visualPriority: CONFIG.priorities[0],
+            colorStyle: CONFIG.colors[0].name,
+            visualComplexity: CONFIG.complexities[1],
+            businessInfo: {
+                brandName: "", category: "", description: "", usp: "",
+                headline: "", subheadline: "", promo: "", price: "",
+                cta: "", website: "", wa: "", address: ""
+            },
+            visualDirection: CONFIG.directions[0],
+            backgroundStyle: CONFIG.backgrounds[0],
+            options: {
+                opt_icon: true, opt_cta: true, opt_badge: false, opt_shadow: true,
+                opt_brand: false, opt_font_rec: true, opt_color_rec: true, opt_ref: false
+            },
+            assetMode: CONFIG.assetModes[0]
+        };
+
+        
+        function createSectionHeader(title, step) {
+            return `
+                <div class="mb-4 flex items-center gap-3">
+                    <span class="w-6 h-6 rounded-full bg-gray-100 text-gray-500 text-xs flex items-center justify-center font-bold">${step}</span>
+                    <h3 class="text-sm font-bold text-gray-800 tracking-wide uppercase">${title}</h3>
+                </div>
+            `;
+        }
+
+        function createPillGroup(items, stateKey, sectionId) {
+            let html = `<div class="flex flex-wrap gap-2" id="${sectionId}">`;
+            items.forEach(item => {
+                const isActive = state[stateKey] === item;
+                const activeClass = isActive ? 'active' : 'bg-white border-gray-200';
+                html += `<button class="pill-btn px-4 py-2 rounded-full border text-sm font-medium ${activeClass}" data-group="${stateKey}" data-value="${item}">${item}</button>`;
+            });
+            html += `</div>`;
+            return html;
+        }
+
+        function createInput(id, label, placeholder, isTextarea = false) {
+            const baseClass = "input-field w-full bg-gray-50 border border-gray-200 text-gray-800 text-sm rounded-lg block p-3 transition-colors";
+            if (isTextarea) {
+                return `
+                    <div>
+                        <label for="${id}" class="block mb-1.5 text-xs font-semibold text-gray-600">${label}</label>
+                        <textarea id="${id}" rows="3" class="${baseClass} resize-none" placeholder="${placeholder}"></textarea>
+                    </div>
+                `;
+            }
+            return `
+                <div>
+                    <label for="${id}" class="block mb-1.5 text-xs font-semibold text-gray-600">${label}</label>
+                    <input type="text" id="${id}" class="${baseClass}" placeholder="${placeholder}">
+                </div>
+            `;
+        }
+
+        function createSelect(id, items, stateKey) {
+            let html = `
+                <div class="relative">
+                    <select id="${id}" class="input-field w-full bg-gray-50 border border-gray-200 text-gray-800 text-sm rounded-lg block p-3 appearance-none cursor-pointer">
+            `;
+            items.forEach(item => {
+                const isSelected = state[stateKey] === item ? 'selected' : '';
+                html += `<option value="${item}" ${isSelected}>${item}</option>`;
+            });
+            html += `
+                    </select>
+                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
+                        <i class="fas fa-chevron-down text-xs"></i>
+                    </div>
+                </div>
+            `;
+            return html;
+        }
+
+        function createToggle(option) {
+            const isChecked = state.options[option.id] ? 'checked' : '';
+            return `
+                <div class="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+                    <span class="text-sm text-gray-700 font-medium">${option.label}</span>
+                    <div class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
+                        <input type="checkbox" name="toggle" id="${option.id}" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 border-gray-300 appearance-none cursor-pointer transition-all duration-300 z-10" ${isChecked}/>
+                        <label for="${option.id}" class="toggle-label block overflow-hidden h-5 rounded-full bg-gray-300 cursor-pointer transition-all duration-300"></label>
+                    </div>
+                </div>
+            `;
+        }
+
+        function createColorPicker() {
+            let html = `<div class="flex flex-wrap gap-3" id="color-picker-group">`;
+            CONFIG.colors.forEach(color => {
+                const isActive = state.colorStyle === color.name;
+                const activeClass = isActive ? 'active' : '';
+                const bgStyle = color.hex.startsWith('linear') ? `background: ${color.hex}` : `background-color: ${color.hex}`;
+                
+                html += `
+                    <div class="group relative flex flex-col items-center gap-1 cursor-pointer color-option" data-value="${color.name}">
+                        <div class="w-8 h-8 rounded-full border border-gray-200 shadow-sm color-circle ${activeClass}" style="${bgStyle}"></div>
+                        <span class="text-[10px] text-gray-500 font-medium opacity-0 group-hover:opacity-100 transition-opacity absolute -bottom-5 whitespace-nowrap">${color.name}</span>
+                    </div>
+                `;
+            });
+            html += `</div>`;
+            return html;
+        }
+
+        function renderSidebar() {
+            const container = document.getElementById('sidebar-content');
+            
+            // Section 1: Banner Type
+            let html = `<div class="bg-white rounded-xl border border-brand-border p-5 shadow-sm">`;
+            html += createSectionHeader("Banner Type", 1);
+            html += createPillGroup(CONFIG.bannerTypes, 'bannerType', 'group-bannerType');
+            html += `</div>`;
+
+            // Section 2: Output Format
+            html += `<div class="bg-white rounded-xl border border-brand-border p-5 shadow-sm">`;
+            html += createSectionHeader("Output Format", 2);
+            html += createPillGroup(CONFIG.formats, 'outputFormat', 'group-outputFormat');
+            html += `</div>`;
+
+            // Section 3: Banner Ratio
+            html += `<div class="bg-white rounded-xl border border-brand-border p-5 shadow-sm">`;
+            html += createSectionHeader("Banner Ratio", 3);
+            html += createPillGroup(CONFIG.ratios, 'bannerRatio', 'group-bannerRatio');
+            html += `</div>`;
+
+            // Section 4: Design Style
+            html += `<div class="bg-white rounded-xl border border-brand-border p-5 shadow-sm">`;
+            html += createSectionHeader("Design Style", 4);
+            html += createPillGroup(CONFIG.designStyles, 'designStyle', 'group-designStyle');
+            html += `</div>`;
+
+            // Section 5: Visual Priority
+            html += `<div class="bg-white rounded-xl border border-brand-border p-5 shadow-sm">`;
+            html += createSectionHeader("Visual Priority", 5);
+            html += createPillGroup(CONFIG.priorities, 'visualPriority', 'group-visualPriority');
+            html += `</div>`;
+
+            // Section 6: Color Style
+            html += `<div class="bg-white rounded-xl border border-brand-border p-5 shadow-sm">`;
+            html += createSectionHeader("Color Style", 6);
+            html += createColorPicker();
+            html += `</div>`;
+
+            // Section 7: Visual Complexity
+            html += `<div class="bg-white rounded-xl border border-brand-border p-5 shadow-sm">`;
+            html += createSectionHeader("Visual Complexity", 7);
+            html += createPillGroup(CONFIG.complexities, 'visualComplexity', 'group-visualComplexity');
+            html += `</div>`;
+
+            // Section 8: Business Information
+            html += `<div class="bg-white rounded-xl border border-brand-border p-5 shadow-sm">`;
+            html += createSectionHeader("Business Information", 8);
+            html += `<div class="space-y-4">`;
+            html += createInput("biz_brand", "Nama Brand", "Contoh: BannerCraft");
+            html += createInput("biz_category", "Kategori", "Contoh: Software SaaS");
+            html += createInput("biz_desc", "Deskripsi Produk/Jasa", "Penjelasan singkat produk...", true);
+            html += createInput("biz_usp", "USP (Unique Selling Proposition)", "Keunggulan utama...");
+            html += createInput("biz_headline", "Headline Utama", "Teks besar di banner");
+            html += createInput("biz_subhead", "Subheadline", "Teks pendukung");
+            html += createInput("biz_promo", "Promo / Diskon", "Contoh: Diskon 50% Hari Ini");
+            html += createInput("biz_price", "Harga", "Contoh: Rp 99.000");
+            html += createInput("biz_cta", "Call To Action (CTA)", "Contoh: Beli Sekarang");
+            html += createInput("biz_web", "Website", "www.website.com");
+            html += createInput("biz_wa", "Nomor WA", "0812xxxxxx");
+            html += createInput("biz_address", "Alamat", "Alamat toko fisik...", true);
+            html += `</div></div>`;
+
+            // Section 9: Visual Direction
+            html += `<div class="bg-white rounded-xl border border-brand-border p-5 shadow-sm">`;
+            html += createSectionHeader("Visual Direction", 9);
+            html += createSelect("select_direction", CONFIG.directions, 'visualDirection');
+            html += `</div>`;
+
+            // Section 10: Background Style
+            html += `<div class="bg-white rounded-xl border border-brand-border p-5 shadow-sm">`;
+            html += createSectionHeader("Background Style", 10);
+            html += createSelect("select_background", CONFIG.backgrounds, 'backgroundStyle');
+            html += `</div>`;
+
+            // Section 11: Options
+            html += `<div class="bg-white rounded-xl border border-brand-border p-5 shadow-sm">`;
+            html += createSectionHeader("Options", 11);
+            html += `<div class="flex flex-col">`;
+            CONFIG.options.forEach(opt => {
+                html += createToggle(opt);
+            });
+            html += `</div></div>`;
+
+            // Section 12: Asset Mode
+            html += `<div class="bg-white rounded-xl border border-brand-border p-5 shadow-sm">`;
+            html += createSectionHeader("Asset Mode", 12);
+            html += createPillGroup(CONFIG.assetModes, 'assetMode', 'group-assetMode');
+            html += `</div>`;
+
+            container.innerHTML = html;
+            attachEventListeners();
+        }
+
+        function attachEventListeners() {
+            // Pill clicks
+            document.querySelectorAll('.pill-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const group = e.target.getAttribute('data-group');
+                    const value = e.target.getAttribute('data-value');
+                    
+                    // Update State
+                    state[group] = value;
+                    
+                    // Update UI
+                    document.querySelectorAll(`#group-${group} .pill-btn`).forEach(b => {
+                        b.classList.remove('active', 'bg-brand-black', 'text-white', 'border-brand-black');
+                        b.classList.add('bg-white', 'text-slate-600', 'border-gray-200');
+                    });
+                    e.target.classList.add('active');
+                    e.target.classList.remove('bg-white', 'text-slate-600', 'border-gray-200');
+                });
+            });
+
+            // Color picker clicks
+            document.querySelectorAll('.color-option').forEach(el => {
+                el.addEventListener('click', (e) => {
+                    const value = el.getAttribute('data-value');
+                    state.colorStyle = value;
+                    
+                    document.querySelectorAll('.color-circle').forEach(c => c.classList.remove('active'));
+                    el.querySelector('.color-circle').classList.add('active');
+                });
+            });
+
+            // Select changes
+            document.getElementById('select_direction').addEventListener('change', (e) => {
+                state.visualDirection = e.target.value;
+            });
+            document.getElementById('select_background').addEventListener('change', (e) => {
+                state.backgroundStyle = e.target.value;
+            });
+
+            // Input changes (Business Info)
+            const inputs = ['brand', 'category', 'desc', 'usp', 'headline', 'subhead', 'promo', 'price', 'cta', 'web', 'wa', 'address'];
+            inputs.forEach(key => {
+                const el = document.getElementById(`biz_${key}`);
+                if(el) {
+                    el.addEventListener('input', (e) => {
+                        // map id biz_desc to description, etc.
+                        let stateKey = key;
+                        if(key === 'desc') stateKey = 'description';
+                        if(key === 'subhead') stateKey = 'subheadline';
+                        if(key === 'web') stateKey = 'website';
+                        
+                        state.businessInfo[stateKey] = e.target.value;
+                    });
+                }
+            });
+
+            // Toggle changes
+            CONFIG.options.forEach(opt => {
+                const el = document.getElementById(opt.id);
+                if(el) {
+                    el.addEventListener('change', (e) => {
+                        state.options[opt.id] = e.target.checked;
+                    });
+                }
+            });
+        }
+
+        function showToast(message) {
+            // Remove existing toasts
+            document.querySelectorAll('.custom-toast').forEach(t => t.remove());
+
+            const toast = document.createElement('div');
+            toast.className = 'custom-toast fixed bottom-6 left-1/2 transform -translate-x-1/2 lg:left-auto lg:right-6 lg:translate-x-0 bg-brand-black text-white px-6 py-3 rounded-xl shadow-float z-50 flex items-center space-x-3 text-sm font-medium border border-gray-800';
+            toast.style.transition = 'all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55)';
+            toast.style.opacity = '0';
+            toast.style.transform = 'translate(-50%, 20px)'; // Mobile default
+            if(window.innerWidth >= 1024) {
+                toast.style.transform = 'translateY(20px)';
+            }
+            
+            toast.innerHTML = `
+                <div class="w-6 h-6 rounded-full bg-brand-orange/20 flex items-center justify-center shrink-0">
+                    <i class="fas fa-check text-brand-orange text-xs"></i>
+                </div>
+                <span>${message}</span>
+            `;
+            
+            document.body.appendChild(toast);
+            
+            // Animate in
+            requestAnimationFrame(() => {
+                toast.style.opacity = '1';
+                if(window.innerWidth >= 1024) {
+                    toast.style.transform = 'translateY(0)';
+                } else {
+                    toast.style.transform = 'translate(-50%, 0)';
+                }
+            });
+
+            // Animate out
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                if(window.innerWidth >= 1024) {
+                    toast.style.transform = 'translateY(20px)';
+                } else {
+                    toast.style.transform = 'translate(-50%, 20px)';
+                }
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        function generatePromptText() {
+            const b = state.businessInfo;
+            const o = state.options;
+
+            // Helper to handle empty inputs gracefully
+            const val = (str, label) => str ? str.trim() : `[Insert ${label} Here]`;
+
+            // Ensure length and professionalism by adding detailed agency-level jargon based on selections.
+            let styleSpecificInstructions = "";
+            if(state.designStyle.includes("Minimal")) {
+                styleSpecificInstructions = "Embrace extreme negative space. Use a strict grid system. Elements should be understated but impactful. Avoid any unnecessary decorative items.";
+            } else if (state.designStyle.includes("Luxury")) {
+                styleSpecificInstructions = "Utilize rich, deep tones or crisp metallic accents. Typography must be elegant, favoring high-end serif or sophisticated sans-serif. Composition should feel expansive and exclusive.";
+            } else if (state.designStyle.includes("Dynamic") || state.designStyle.includes("Bold")) {
+                styleSpecificInstructions = "Use strong diagonal lines or asymmetrical balance to create motion. High contrast is essential. Elements can break out of standard bounding boxes to create depth.";
+            } else {
+                styleSpecificInstructions = "Maintain a clean, corporate structure. Adhere strictly to brand safety guidelines with clear, legible content and a trustworthy aesthetic.";
+            }
+
+            const prompt = `
+[1. ROLE & PERSONA]
+Act as a world-class, award-winning Creative Director and Senior Graphic Designer at a top-tier global advertising agency. Your expertise lies in crafting visually stunning, highly effective, and strategically sound commercial marketing assets. You possess a masterful understanding of visual hierarchy, advanced color theory, typography systems, consumer psychology, and modern UI/UX principles applied to graphic design.
+
+[2. OBJECTIVE]
+Your task is to conceptualize and generate a highly detailed, professional image generation prompt for a commercial design project.
+- Project Type: ${state.bannerType}
+- Output Format Strategy: ${state.outputFormat}
+- Target Aspect Ratio / Dimensions: ${state.bannerRatio}
+- Overarching Design Style: ${state.designStyle}
+
+The final visual must serve as a premium marketing asset that instantly captures attention, communicates value, and drives user action.
+
+[3. BUSINESS INFORMATION & CONTEXT]
+Integrate the following business context conceptually into the visual layout (ensure space and hierarchy accommodate these elements):
+- Brand Name: ${val(b.brandName, 'Brand Name')}
+- Industry Category: ${val(b.category, 'Industry/Category')}
+- Product/Service Context: ${val(b.description, 'Product/Service Details')}
+- Unique Selling Proposition (USP): ${val(b.usp, 'USP')}
+- Primary Headline: "${val(b.headline, 'Main Headline')}"
+- Supporting Subheadline: "${val(b.subheadline, 'Subheadline')}"
+- Promotional Offer: ${val(b.promo, 'Offer/Discount')}
+- Pricing Strategy: ${val(b.price, 'Price Point')}
+- Primary Call To Action (CTA): "${val(b.cta, 'CTA Text')}"
+- Contact Details: ${val(b.website, 'Website')} | ${val(b.wa, 'WhatsApp/Phone')} | ${val(b.address, 'Physical Address')}
+
+[4. LAYOUT & COMPOSITION INSTRUCTIONS]
+- Visual Priority & Focal Point: ${state.visualPriority}. This element MUST command immediate attention upon first glance.
+- Visual Direction / Setting: ${state.visualDirection}. Create an environment that contextualizes the subject matter perfectly.
+- Visual Complexity: ${state.visualComplexity}.
+- Style Specifics: ${styleSpecificInstructions}
+- Hierarchy: Design a meticulously balanced layout. Implement the rule of thirds, golden ratio, or a strict column grid where applicable. Guide the viewer's eye seamlessly from the primary focal point, to the main headline, down to supporting details, resting finally on the Call To Action.
+- Negative Space: Maintain ample, deliberate white space (negative space) to allow the design to breathe, feel uncluttered, and elevate the premium perception.
+
+[5. TYPOGRAPHY RECOMMENDATIONS & STRUCTURE]
+${o.opt_font_rec ? 'Recommend a premium, agency-standard font pairing (e.g., geometric sans-serif for headlines like Montserrat, Gilroy, or Helvetica Neue, paired with a highly readable sans or elegant serif for body text). ' : 'Use standard clean, legible corporate typography. '}
+- Establish a rigorous typographic hierarchy.
+- Utilize varying font weights (e.g., Black/ExtraBold for headlines, Regular/Book for body) to create contrast.
+- Set appropriate tracking (letter-spacing) for a modern aesthetic, and comfortable leading (line-height) to ensure absolute readability across all screen sizes.
+- Ensure strict alignment (Left, Center, or Right depending on the layout grid); avoid messy ragged edges.
+
+[6. COLOR PALETTE & TONALITY]
+- Primary Accent Color: ${state.colorStyle}.
+${o.opt_color_rec ? 'Generate a cohesive, sophisticated, and complementary color scheme built around this primary accent. Utilize monochromatic shifts, analogous harmonies, or strategic complementary contrasts. ' : 'Use this primary color strategically to highlight key information and create focal contrast. '}
+- Contrast Requirements: Ensure all foreground elements and typography meet or exceed WCAG AAA accessibility standards for contrast against the background to guarantee legibility.
+
+[7. BACKGROUND STYLE]
+- Background Concept: ${state.backgroundStyle}.
+- The background must act as a supportive foundation, never competing with the foreground elements. It should provide necessary depth, texture, and contextual atmosphere without introducing visual noise or clutter that detracts from the main message.
+
+[8. LIGHTING & RENDERING (COMMERCIAL STANDARD)]
+- Lighting Setup: Employ high-end commercial studio lighting techniques or natural cinematic lighting depending on the visual direction.
+- Shadows & Highlights: Use soft, diffused lighting to mitigate harsh shadows. Implement subtle edge lighting (rim light) to separate the main subject clearly from the background.
+- Rendering Quality: Ensure premium material reflections (if applicable), accurate global illumination, and realistic depth of field to create a multi-dimensional, professional output.
+
+[9. GRAPHIC ELEMENTS & INTEGRATION]
+Incorporate professional graphic assets to enhance layout structure:
+- Iconography: ${o.opt_icon ? 'Yes. Utilize a cohesive set of minimalist, premium line-art, or flat vector icons to represent features or contact methods visually.' : 'No icons. Rely purely on typography and the main visual.'}
+- CTA Button Design: ${o.opt_cta ? 'Yes. Design a highly contrasting, prominent pill-shaped or softly rounded rectangular button for the Call To Action. Apply a subtle drop shadow to signify interactivity and clickability.' : 'No standalone button shape; integrate the CTA text organically.'}
+- Promotional Badge: ${o.opt_badge ? 'Yes. Include an elegant, modern geometric badge, ribbon, or tag to house the promotional offer, ensuring it stands out without cheapening the design.' : 'No promotional badges.'}
+- Depth & Shadows: ${o.opt_shadow ? 'Yes. Apply soft, realistic, multi-layered drop shadows (e.g., CSS style shadows) to floating elements, text boxes, or products to create a modern, premium depth effect.' : 'Keep the design completely flat, embracing a 2D aesthetic.'}
+- Brand Assets: ${o.opt_brand ? 'Yes. Seamlessly integrate standard brand assets, subtle watermarks, or framing devices that align with corporate identity.' : 'No specific brand overlays required.'}
+- Reference Usage: ${o.opt_ref ? 'Base the structural composition loosely on high-performing, industry-standard layouts, optimizing for conversion.' : 'Generate a wholly original, innovative composition.'}
+- Asset Mode Constraint: Strictly adhere to ${state.assetMode} methodologies.
+
+[10. NEGATIVE PROMPT (CRITICAL EXCLUSIONS)]
+To ensure highest quality, ABSOLUTELY DO NOT include any of the following elements:
+Visual clutter, stretched or warped images, distorted human anatomy, blurry or unreadable text generation (hallucinations), generic cheap clip art, watermarks, stock photo artifacts, low-resolution textures, poor spatial alignment, random floating meaningless icons, overly saturated chaotic color palettes, messy backgrounds that obscure copy, duplicated objects, lack of focal point, unprofessional cropping.
+
+[11. FINAL QUALITY & RENDER PARAMETERS]
+The final output must unequivocally resemble an award-winning advertising banner. It must possess Behance-featured quality graphic design, akin to an Adobe Photoshop commercial composition created by a master designer. 
+Keywords for rendering engine: Professional marketing asset, luxury visual hierarchy, print-ready crispness, ultra-realistic commercial advertising standard, agency-level graphic design, pixel-perfect execution, balanced symmetrical/asymmetrical spacing, premium modern typography, unmissable focal point, elegant and harmonious composition, high readability, 8k resolution, highly detailed.
+            `;
+            
+            return prompt.trim();
+        }
+
+        function updateResultUI(promptText) {
+            const textarea = document.getElementById('prompt-output');
+            textarea.value = promptText;
+            
+            // Word count
+            const words = promptText.split(/\s+/).filter(word => word.length > 0).length;
+            document.getElementById('word-count').innerText = `${words} words`;
+
+            // Update Badges
+            const badgesContainer = document.getElementById('meta-badges');
+            badgesContainer.innerHTML = `
+                <span class="bg-gray-100 text-gray-700 text-xs font-semibold px-2.5 py-1 rounded-md border border-gray-200">${state.bannerType}</span>
+                <span class="bg-gray-100 text-gray-700 text-xs font-semibold px-2.5 py-1 rounded-md border border-gray-200">${state.bannerRatio}</span>
+                <span class="bg-brand-orange/10 text-brand-orange text-xs font-semibold px-2.5 py-1 rounded-md border border-brand-orange/20">${state.designStyle}</span>
+                <span class="bg-gray-100 text-gray-700 text-xs font-semibold px-2.5 py-1 rounded-md border border-gray-200">${state.visualPriority}</span>
+            `;
+
+            // Transition UI
+            document.getElementById('empty-state').classList.add('hide');
+            setTimeout(() => {
+                document.getElementById('prompt-result-container').classList.add('show');
+            }, 300);
+        }
+
+        document.getElementById('btn-generate').addEventListener('click', () => {
+            // Add loading state to button
+            const btn = document.getElementById('btn-generate');
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML = `<i class="fas fa-circle-notch fa-spin"></i> Generating...`;
+            btn.disabled = true;
+            btn.classList.add('opacity-80', 'cursor-not-allowed');
+
+            // Simulate slight delay for processing feel
+            setTimeout(() => {
+                const prompt = generatePromptText();
+                updateResultUI(prompt);
+                
+                // Reset button
+                btn.innerHTML = originalHTML;
+                btn.disabled = false;
+                btn.classList.remove('opacity-80', 'cursor-not-allowed');
+                
+                // Scroll to top of right panel on mobile
+                if(window.innerWidth < 1024) {
+                    document.querySelector('section').scrollTo({top: 0, behavior: 'smooth'});
+                }
+            }, 600);
+        });
+
+        // Action Buttons
+        document.getElementById('btn-copy').addEventListener('click', () => {
+            const text = document.getElementById('prompt-output').value;
+            navigator.clipboard.writeText(text).then(() => {
+                showToast("Prompt copied to clipboard!");
+            }).catch(err => {
+                // Fallback for iframe/older browsers
+                const textArea = document.createElement("textarea");
+                textArea.value = text;
+                document.body.appendChild(textArea);
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    showToast("Prompt copied to clipboard!");
+                } catch (err) {
+                    console.error('Copy failed', err);
+                }
+                document.body.removeChild(textArea);
+            });
+        });
+
+        document.getElementById('btn-chatgpt').addEventListener('click', () => {
+            // Copy first, then open tab
+            const text = document.getElementById('prompt-output').value;
+            navigator.clipboard.writeText(text).then(() => {
+                showToast("Copied! Opening ChatGPT...");
+                setTimeout(() => {
+                    window.open('https://chatgpt.com/', '_blank');
+                }, 1000);
+            }).catch(err => {
+                // Fallback
+                const textArea = document.createElement("textarea");
+                textArea.value = text;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                showToast("Copied! Opening ChatGPT...");
+                setTimeout(() => {
+                    window.open('https://chatgpt.com/', '_blank');
+                }, 1000);
+            });
+        });
+
+        document.getElementById('btn-download').addEventListener('click', () => {
+            const text = document.getElementById('prompt-output').value;
+            const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            
+            // Format filename safely
+            const safeBrand = (state.businessInfo.brandName || "Brand").replace(/[^a-z0-9]/gi, '_').toLowerCase();
+            const safeType = state.bannerType.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+            link.href = url;
+            link.download = `BannerCraft_Prompt_${safeBrand}_${safeType}.txt`;
+            
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            
+            showToast("TXT File downloaded!");
+        });
+
+        // Initialize App
+        document.addEventListener('DOMContentLoaded', () => {
+            renderSidebar();
+        });
+
+    </script>
+</body>
+</html>
