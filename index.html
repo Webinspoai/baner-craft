@@ -203,7 +203,7 @@
                 <!-- Action Buttons Row -->
                 <div class="flex flex-wrap gap-3">
                     <button id="btn-copy" class="flex-1 bg-white border border-brand-border hover:bg-gray-50 hover:border-gray-300 text-gray-700 font-medium py-3 px-4 rounded-xl shadow-sm transition-all flex items-center justify-center gap-2">
-                        <i class="far fa-copy"></i> Copy Prompt
+                        <i class="far fa-copy"></i> Copy Semua
                     </button>
                     <button id="btn-chatgpt" class="flex-1 bg-[#10A37F] hover:bg-[#0E906F] text-white font-medium py-3 px-4 rounded-xl shadow-sm transition-all flex items-center justify-center gap-2">
                         <i class="fas fa-robot"></i> Kirim ke ChatGPT
@@ -213,15 +213,9 @@
                     </button>
                 </div>
 
-                <!-- Prompt Text Area -->
-                <div class="bg-white rounded-2xl shadow-soft border border-brand-border overflow-hidden flex flex-col">
-                    <div class="bg-gray-50 border-b border-brand-border px-6 py-3 flex items-center justify-between">
-                        <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Prompt Output</span>
-                        <span id="word-count" class="text-xs text-gray-400">0 words</span>
-                    </div>
-                    <div class="p-6">
-                        <textarea id="prompt-output" readonly class="w-full h-[60vh] resize-none focus:outline-none text-gray-700 leading-relaxed font-mono text-sm bg-transparent" spellcheck="false"></textarea>
-                    </div>
+                <!-- Dynamic Prompts Container (Replaces single textarea) -->
+                <div id="dynamic-prompts-container" class="flex flex-col gap-6">
+                    <!-- Prompts will be injected here as separate cards -->
                 </div>
             </div>
             
@@ -619,18 +613,93 @@
                 styleSpecificInstructions = "Maintain a clean, corporate structure. Adhere strictly to brand safety guidelines with clear, legible content and a trustworthy aesthetic.";
             }
 
-            const prompt = `
+            let brandAssetPrefix = "";
+            if(state.assetMode === "Brand Asset Mode") {
+                brandAssetPrefix = `[CRITICAL WORKFLOW INSTRUCTION: BRAND ASSET MODE]
+Before starting the banner design, I need your brand assets first.
+
+Please upload the following assets if available:
+1. Company Logo
+2. Product Photos
+3. Founder Photo
+4. Team Photo
+5. Store / Office Photo
+6. Packaging Photo
+7. Website Screenshot
+8. Dashboard Screenshot
+9. Existing Social Media Feed
+10. Brand Color Guide
+11. Typography / Font Guide
+12. Brand Guidelines
+13. Previous Promotional Banner
+14. Brochure / Catalog
+15. Any visual references you want me to follow
+
+If an asset is unavailable, simply skip it.
+
+VERY IMPORTANT:
+After requesting the assets, YOU MUST STOP.
+You MUST wait for the user to upload the assets.
+You MUST NOT generate any banner.
+You MUST NOT continue automatically.
+You MUST wait for user input.
+
+After the user uploads the assets, you may continue normally using ALL uploaded assets as the highest priority visual reference.
+
+Priority Order:
+1. Uploaded Brand Assets
+2. Brand Positioning
+3. Campaign Goal
+4. Offer
+5. Audience
+6. Visual Style
+7. Color Palette
+8. Design Details
+
+If uploaded assets conflict with any prompt instruction, Uploaded Brand Assets ALWAYS WIN.
+
+When generating the final banner prompt, repeatedly remind yourself:
+- Preserve the logo exactly.
+- Preserve product appearance exactly.
+- Preserve founder face exactly.
+- Preserve packaging exactly.
+- Preserve typography if provided.
+- Never redesign uploaded brand assets.
+- Never replace uploaded products.
+- Never invent a new logo.
+- Never invent a new product.
+
+======================================================================
+`;
+            }
+
+            const createPrompt = (context = null, mode = "single") => {
+                let projectType = state.bannerType;
+                let outputStrategy = state.outputFormat;
+                let targetRatio = state.bannerRatio;
+                let specificInstructions = "";
+
+                if (mode === "series" && context) {
+                    projectType = `Banner Series Component: ${context.type} (${state.bannerType})`;
+                    outputStrategy = `Standalone Banner from a Cohesive Series (${context.type})`;
+                    specificInstructions = `\n\n[BANNER SPECIFIC ROLE & FOCUS - CRITICAL]\n- Banner Objective: ${context.objective}\n- Visual & Storytelling Focus: ${context.focus}\n- Copywriting Instruction: DO NOT use the default business headline/subheadline verbatim. You MUST write a UNIQUE Headline, Subheadline, and CTA specifically tailored for this banner's objective (${context.type}).\n- Composition Instruction: Adapt the visual hierarchy and layout specifically for this objective (e.g., if focus is 'Dashboard', prioritize UI mockups; if 'Hook', prioritize big text and emotional imagery). Ensure it functions independently while maintaining campaign visual consistency.`;
+                } else if (mode === "multisize" && context) {
+                    projectType = `Multi-Platform Campaign Component: ${context.platform} (${state.bannerType})`;
+                    outputStrategy = `Generate One Campaign. Ready for Every Platform. (Optimized for ${context.platform})`;
+                    targetRatio = `${context.ratio} (Target Resolution: ${context.dimensions})`;
+                    specificInstructions = `\n\n[PLATFORM OPTIMIZATION - CRITICAL]\n- Target Platform: ${context.platform}\n- Strict Composition Rules: ${context.focus}\n- Layout Instruction: You MUST strictly adapt the visual hierarchy, layout, and composition for this specific platform's aspect ratio and safe zones. Do not simply resize; intelligently rearrange elements to maximize platform effectiveness.\n- Visual Consistency: Ensure perfect visual consistency across the entire campaign (brand identity, colors, typography, mood, product presentation, and design language must remain identical to other platforms).`;
+                }
+
+                return `${brandAssetPrefix}
 [1. ROLE & PERSONA]
 Act as a world-class, award-winning Creative Director and Senior Graphic Designer at a top-tier global advertising agency. Your expertise lies in crafting visually stunning, highly effective, and strategically sound commercial marketing assets. You possess a masterful understanding of visual hierarchy, advanced color theory, typography systems, consumer psychology, and modern UI/UX principles applied to graphic design.
 
 [2. OBJECTIVE]
 Your task is to conceptualize and generate a highly detailed, professional image generation prompt for a commercial design project.
-- Project Type: ${state.bannerType}
-- Output Format Strategy: ${state.outputFormat}
-- Target Aspect Ratio / Dimensions: ${state.bannerRatio}
-- Overarching Design Style: ${state.designStyle}
-
-The final visual must serve as a premium marketing asset that instantly captures attention, communicates value, and drives user action.
+- Project Type: ${projectType}
+- Output Format Strategy: ${outputStrategy}
+- Target Aspect Ratio / Dimensions: ${targetRatio}
+- Overarching Design Style: ${state.designStyle}${specificInstructions}
 
 [3. BUSINESS INFORMATION & CONTEXT]
 Integrate the following business context conceptually into the visual layout (ensure space and hierarchy accommodate these elements):
@@ -690,25 +759,114 @@ Visual clutter, stretched or warped images, distorted human anatomy, blurry or u
 
 [11. FINAL QUALITY & RENDER PARAMETERS]
 The final output must unequivocally resemble an award-winning advertising banner. It must possess Behance-featured quality graphic design, akin to an Adobe Photoshop commercial composition created by a master designer. 
-Keywords for rendering engine: Professional marketing asset, luxury visual hierarchy, print-ready crispness, ultra-realistic commercial advertising standard, agency-level graphic design, pixel-perfect execution, balanced symmetrical/asymmetrical spacing, premium modern typography, unmissable focal point, elegant and harmonious composition, high readability, 8k resolution, highly detailed.
-            `;
-            
-            return prompt.trim();
+Keywords for rendering engine: Professional marketing asset, luxury visual hierarchy, print-ready crispness, ultra-realistic commercial advertising standard, agency-level graphic design, pixel-perfect execution, balanced symmetrical/asymmetrical spacing, premium modern typography, unmissable focal point, elegant and harmonious composition, high readability, 8k resolution, highly detailed.`.trim();
+            };
+
+            // DYNAMIC BANNER ENGINE (Scalable Array Structure)
+            if (state.outputFormat === "Banner Series") {
+                const seriesConfig = [
+                    { type: "HOOK", objective: "Stop scrolling immediately.", focus: "Big headline, curiosity, emotional trigger, high visual impact." },
+                    { type: "FEATURE", objective: "Explain the product features.", focus: "Dashboard, Main Features, Capabilities, Workflow, UI." },
+                    { type: "BENEFIT", objective: "Explain benefits.", focus: "Transformation, Business results, Why people should care, Value." },
+                    { type: "OFFER", objective: "Present the offer.", focus: "Lifetime Access, One Time Payment, Bonuses, Value Stack, Price positioning, Optional urgency." },
+                    { type: "PACKAGING / PRODUCT SHOWCASE", objective: "Premium Product Showcase.", focus: "Show the ecosystem, Dashboard Mockup, Software Packaging, Bonus Products, Premium Presentation. Increase perceived value." },
+                    { type: "CALL TO ACTION", objective: "Strong CTA.", focus: "Clear Action, Confidence, Trust, Purchase Motivation, Final Push." }
+                ];
+
+                let finalOutput = [];
+                seriesConfig.forEach((banner, index) => {
+                    let header = `====================================================\n`;
+                    header += `BANNER ${index + 1} OF ${seriesConfig.length}\n`;
+                    header += `${banner.type}\n`;
+                    header += `------------------------------------\n\n`;
+                    
+                    let bannerPrompt = createPrompt(banner, "series");
+                    
+                    finalOutput.push({
+                        title: `Banner ${index + 1} of ${seriesConfig.length} - ${banner.type}`,
+                        text: header + bannerPrompt
+                    });
+                });
+                
+                return finalOutput;
+            }
+
+            // MULTI-PLATFORM CAMPAIGN ENGINE (Adaptive Multi Size)
+            if (state.outputFormat === "Adaptive Multi Size") {
+                const multiSizeConfig = [
+                    { platform: "INSTAGRAM FEED", dimensions: "1080 × 1080", ratio: "1:1", focus: "Square composition, balanced spacing, social-first design." },
+                    { platform: "INSTAGRAM STORY", dimensions: "1080 × 1920", ratio: "9:16", focus: "Vertical composition, Story Safe Area, large CTA, swipe-friendly layout." },
+                    { platform: "FACEBOOK FEED", dimensions: "1080 × 1080", ratio: "1:1", focus: "Square composition, balanced social feed layout, highly readable text, clear offer presentation." },
+                    { platform: "FACEBOOK COVER", dimensions: "1640 × 624", ratio: "~2.6:1", focus: "Ultra wide composition, center-safe design, minimal text." },
+                    { platform: "WEBSITE HERO BANNER", dimensions: "1920 × 1080", ratio: "16:9", focus: "Wide Hero Section, large visual focus on one side, navigation safe space, CTA positioned near headline." },
+                    { platform: "LINKEDIN BANNER", dimensions: "1584 × 396", ratio: "4:1", focus: "Corporate style, professional hierarchy, minimal copy, clean composition." }
+                ];
+
+                let finalOutput = [];
+                multiSizeConfig.forEach((banner) => {
+                    let header = `====================================================\n`;
+                    header += `${banner.platform}\n`;
+                    header += `${banner.dimensions}\n`;
+                    header += `----------------------------------------------------\n\n`;
+                    
+                    let bannerPrompt = createPrompt(banner, "multisize");
+                    
+                    finalOutput.push({
+                        title: `${banner.platform} (${banner.dimensions})`,
+                        text: header + bannerPrompt
+                    });
+                });
+                
+                return finalOutput;
+            }
+
+            // Standard fallback for Single Banner
+            return [{
+                title: "Prompt Output",
+                text: createPrompt(null, "single")
+            }];
         }
 
-        function updateResultUI(promptText) {
-            const textarea = document.getElementById('prompt-output');
-            textarea.value = promptText;
-            
-            // Word count
-            const words = promptText.split(/\s+/).filter(word => word.length > 0).length;
-            document.getElementById('word-count').innerText = `${words} words`;
+        function updateResultUI(prompts) {
+            const container = document.getElementById('dynamic-prompts-container');
+            container.innerHTML = ''; // Clear existing blocks
+
+            prompts.forEach((prompt, index) => {
+                const words = prompt.text.split(/\s+/).filter(word => word.length > 0).length;
+                
+                const block = document.createElement('div');
+                block.className = 'bg-white rounded-2xl shadow-soft border border-brand-border overflow-hidden flex flex-col';
+                block.innerHTML = `
+                    <div class="bg-gray-50 border-b border-brand-border px-6 py-3 flex items-center justify-between">
+                        <span class="text-xs font-semibold text-gray-600 uppercase tracking-wider">${prompt.title}</span>
+                        <div class="flex items-center gap-4">
+                            <span class="text-xs text-gray-400 hidden sm:inline-block">${words} words</span>
+                            <button class="btn-copy-single flex items-center gap-1.5 text-xs font-semibold text-brand-orange hover:bg-brand-orange hover:text-white transition-colors border border-brand-orange/30 px-3 py-1.5 rounded-lg shadow-sm bg-brand-orange/5" data-index="${index}">
+                                <i class="far fa-copy"></i> Salin Bagian Ini
+                            </button>
+                        </div>
+                    </div>
+                    <div class="p-6">
+                        <textarea id="prompt-output-${index}" readonly class="prompt-textarea w-full h-[40vh] resize-none focus:outline-none text-gray-700 leading-relaxed font-mono text-sm bg-transparent" spellcheck="false">${prompt.text}</textarea>
+                    </div>
+                `;
+                container.appendChild(block);
+            });
+
+            // Attach listeners to individual copy buttons
+            document.querySelectorAll('.btn-copy-single').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const index = e.currentTarget.getAttribute('data-index');
+                    const text = document.getElementById(`prompt-output-${index}`).value;
+                    copyTextToClipboard(text, `Berhasil menyalin: ${prompts[index].title}`);
+                });
+            });
 
             // Update Badges
             const badgesContainer = document.getElementById('meta-badges');
             badgesContainer.innerHTML = `
                 <span class="bg-gray-100 text-gray-700 text-xs font-semibold px-2.5 py-1 rounded-md border border-gray-200">${state.bannerType}</span>
-                <span class="bg-gray-100 text-gray-700 text-xs font-semibold px-2.5 py-1 rounded-md border border-gray-200">${state.bannerRatio}</span>
+                <span class="bg-gray-100 text-gray-700 text-xs font-semibold px-2.5 py-1 rounded-md border border-gray-200">${state.outputFormat === "Adaptive Multi Size" ? "Multi Ratio" : state.bannerRatio}</span>
                 <span class="bg-brand-orange/10 text-brand-orange text-xs font-semibold px-2.5 py-1 rounded-md border border-brand-orange/20">${state.designStyle}</span>
                 <span class="bg-gray-100 text-gray-700 text-xs font-semibold px-2.5 py-1 rounded-md border border-gray-200">${state.visualPriority}</span>
             `;
@@ -718,6 +876,37 @@ Keywords for rendering engine: Professional marketing asset, luxury visual hiera
             setTimeout(() => {
                 document.getElementById('prompt-result-container').classList.add('show');
             }, 300);
+        }
+
+        // Helper to gather all generated prompts for global actions
+        function getAllGeneratedText() {
+            const textareas = document.querySelectorAll('.prompt-textarea');
+            return Array.from(textareas).map(ta => ta.value).join('\n\n\n');
+        }
+
+        // Helper for reliable copying
+        function copyTextToClipboard(text, successMessage) {
+            if(navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).then(() => {
+                    showToast(successMessage);
+                }).catch(err => fallbackCopy(text, successMessage));
+            } else {
+                fallbackCopy(text, successMessage);
+            }
+        }
+
+        function fallbackCopy(text, successMessage) {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                showToast(successMessage);
+            } catch (err) {
+                console.error('Copy failed', err);
+            }
+            document.body.removeChild(textArea);
         }
 
         document.getElementById('btn-generate').addEventListener('click', () => {
@@ -730,8 +919,8 @@ Keywords for rendering engine: Professional marketing asset, luxury visual hiera
 
             // Simulate slight delay for processing feel
             setTimeout(() => {
-                const prompt = generatePromptText();
-                updateResultUI(prompt);
+                const prompts = generatePromptText(); // Now returns an array
+                updateResultUI(prompts);
                 
                 // Reset button
                 btn.innerHTML = originalHTML;
@@ -745,52 +934,20 @@ Keywords for rendering engine: Professional marketing asset, luxury visual hiera
             }, 600);
         });
 
-        // Action Buttons
+        // Action Buttons (Global)
         document.getElementById('btn-copy').addEventListener('click', () => {
-            const text = document.getElementById('prompt-output').value;
-            navigator.clipboard.writeText(text).then(() => {
-                showToast("Prompt copied to clipboard!");
-            }).catch(err => {
-                // Fallback for iframe/older browsers
-                const textArea = document.createElement("textarea");
-                textArea.value = text;
-                document.body.appendChild(textArea);
-                textArea.select();
-                try {
-                    document.execCommand('copy');
-                    showToast("Prompt copied to clipboard!");
-                } catch (err) {
-                    console.error('Copy failed', err);
-                }
-                document.body.removeChild(textArea);
-            });
+            copyTextToClipboard(getAllGeneratedText(), "Semua prompt berhasil disalin!");
         });
 
         document.getElementById('btn-chatgpt').addEventListener('click', () => {
-            // Copy first, then open tab
-            const text = document.getElementById('prompt-output').value;
-            navigator.clipboard.writeText(text).then(() => {
-                showToast("Copied! Opening ChatGPT...");
-                setTimeout(() => {
-                    window.open('https://chatgpt.com/', '_blank');
-                }, 1000);
-            }).catch(err => {
-                // Fallback
-                const textArea = document.createElement("textarea");
-                textArea.value = text;
-                document.body.appendChild(textArea);
-                textArea.select();
-                document.execCommand('copy');
-                document.body.removeChild(textArea);
-                showToast("Copied! Opening ChatGPT...");
-                setTimeout(() => {
-                    window.open('https://chatgpt.com/', '_blank');
-                }, 1000);
-            });
+            copyTextToClipboard(getAllGeneratedText(), "Disalin! Membuka ChatGPT...");
+            setTimeout(() => {
+                window.open('https://chatgpt.com/', '_blank');
+            }, 1000);
         });
 
         document.getElementById('btn-download').addEventListener('click', () => {
-            const text = document.getElementById('prompt-output').value;
+            const text = getAllGeneratedText();
             const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
